@@ -70,7 +70,7 @@ def get_outliers_loader(batch_size):
     outlier_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     return outlier_loader
 
-def get_loaders(dataset, label_class, batch_size):
+def get_loaders(dataset, label_class, batch_size, datapath=None):
     if dataset in ['cifar10', 'fashion']:
         if dataset == "cifar10":
             ds = torchvision.datasets.CIFAR10
@@ -92,6 +92,14 @@ def get_loaders(dataset, label_class, batch_size):
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
         return train_loader, test_loader
+    elif dataset.lower() == 'cub':
+        if datapath is None:
+            raise RuntimeError('Please provide a path to the Caltech Birds 200 dataset with --datapath=')
+        trainset = CUB_Dataset(path=datapath, train=True)
+        testset  = CUB_Dataset(path=datapath, train=False)
+        train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
+        test_loader  = torch.utils.data.DataLoader(testset,  batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
+        return train_loader, test_loader
     else:
         print('Unsupported Dataset')
         exit()
@@ -106,3 +114,50 @@ def clip_gradient(optimizer, grad_clip):
             param.grad.data.clamp_(-grad_clip, grad_clip)
 
 
+
+import os, PIL.Image
+
+class CUB_Dataset(torch.utils.data.Dataset):
+    def __init__(self, path, train=False):
+        path       = os.path.expanduser(path)
+        imagefiles = open(os.path.join(path, 'images.txt')).read().split('\n')[:-1]
+        imagefiles = [os.path.join(path, 'images', line.split(' ')[1]) for line in imagefiles]
+        labels     = open(os.path.join(path, 'image_class_labels.txt')).read().split('\n')[:-1]
+        labels     = [int(line.split(' ')[1]) for line in labels]
+        split      = open(os.path.join(path, 'train_test_split.txt')).read().split('\n')[:-1]
+        split      = [int(line.split(' ')[1]) for line in split]
+        
+        #defining the first 20 classes as normal as in paper, appendix C
+        normal_classes = np.unique(labels)[:20]
+        
+        if train:
+            #indices of training set as defined by the dataset authors
+            ixs = [i for i in range(len(imagefiles)) if split[i]==1]
+            #remove anormal images
+            ixs = [i for i in ixs if labels[i] in normal_classes]
+        else:
+            #indices of test set as defined by the dataset authors
+            ixs = [i for i in range(len(imagefiles)) if split[i]==0]
+        
+        self.imagefiles = [imagefiles[i] for i in ixs]
+        self.labels     = [labels[i] for i in ixs]
+        
+        if train:
+            #re-using labels as above for cifar10/fmnist
+            #targets of trainset are not used anyway
+            self.targets    = self.labels
+        else:
+            #1 if not in normal classes, 0 otherwise
+            self.targets    = [int(l not in normal_classes) for l in self.labels]
+        
+        self.transform  = transform_color
+    
+    def __len__(self):
+        return len(self.imagefiles)
+    
+    def __getitem__(self, i):
+        imagefile = self.imagefiles[i]
+        image     = PIL.Image.open(imagefile).convert('RGB')
+        image     = self.transform(image)
+        target    = self.targets[i]
+        return image, target

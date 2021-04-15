@@ -89,7 +89,7 @@ def main(args):
         ewc_loss = EWCLoss(frozen_model, fisher)
 
     utils.freeze_parameters(model)
-    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size)
+    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size, datapath=args.datapath)
     train_model(model, train_loader, test_loader, device, args, ewc_loss)
 
 
@@ -103,6 +103,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
+    parser.add_argument('--datapath', default=None)
 
     args = parser.parse_args()
 
